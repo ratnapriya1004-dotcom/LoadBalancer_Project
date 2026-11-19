@@ -156,6 +156,6 @@ Request 4  → Server 2 (8082)
 
 ## 👩‍💻 Author
 
-**Prachi Bharti**
+**Ratnapriya**
 
 GitHub: [LoadBalancer Project](https://github.com/ratnapriya1004-dotcom/LoadBalancer_Project)
