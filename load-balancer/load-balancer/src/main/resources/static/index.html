@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LoadBalancer Monitor</title>
+<style>
+:root{--navy:#142746;--blue:#2864e8;--bg:#f3f6fb;--ink:#17243b;--muted:#718096;--green:#15945b;--red:#d94b55;--line:#e7edf5}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);font-family:Inter,Segoe UI,Arial,sans-serif;color:var(--ink)}
+.topbar{background:var(--navy);color:#fff;padding:20px max(24px,calc((100% - 1120px)/2));display:flex;align-items:center;justify-content:space-between;gap:16px}
+.brand{display:flex;align-items:center;gap:12px}.logo{width:38px;height:38px;border-radius:11px;background:#2d66df;display:grid;place-items:center;font-size:20px}
+.brand h1{font-size:18px;margin:0;font-weight:700}.brand p{font-size:12px;color:#bdcbe0;margin:4px 0 0}
+.system-pill{font-size:12px;padding:7px 11px;border-radius:30px;background:#1c644e;color:#c7f5df;white-space:nowrap}
+.container{max-width:1120px;margin:30px auto;padding:0 22px 40px}
+.heading{display:flex;align-items:flex-end;justify-content:space-between;gap:15px;margin-bottom:20px}.heading h2{margin:0;font-size:23px}.heading p{margin:6px 0 0;color:var(--muted);font-size:13px}
+.refresh-note{color:var(--muted);font-size:12px}
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:15px;margin-bottom:27px}
+.card{background:#fff;border:1px solid var(--line);border-radius:13px;padding:18px;box-shadow:0 3px 12px #1d35570a}
+.metric-label{font-size:12px;color:var(--muted);margin-bottom:10px}.metric-value{font-size:25px;font-weight:750;letter-spacing:-.5px}.metric-sub{font-size:11px;color:var(--muted);margin-top:6px}
+.section-title{font-size:16px;margin:0 0 13px;font-weight:700}
+.servers{display:grid;grid-template-columns:repeat(2,1fr);gap:15px;margin-bottom:27px}
+.server-card{padding:19px}.server-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:13px}.server-name{font-weight:700;font-size:15px}
+.status{font-size:11px;font-weight:700;padding:5px 9px;border-radius:20px}.online{background:#e4f6ed;color:var(--green)}.offline{background:#ffeaec;color:var(--red)}
+.server-url{font-size:12px;color:var(--muted);margin-bottom:15px}.server-stats{display:flex;justify-content:space-between;gap:10px;font-size:12px;color:#52627a}
+.distribution{margin-top:16px}.bar-label{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:7px}.bar{height:7px;border-radius:20px;background:#edf1f7;overflow:hidden}.bar-fill{height:100%;background:var(--blue);border-radius:20px;transition:width .25s}
+.bottom-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:15px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin:13px 0 10px}
+button{border:0;border-radius:8px;padding:11px 15px;font-weight:650;font-size:12px;cursor:pointer;transition:.15s}
+.primary{background:var(--blue);color:#fff}.primary:hover{background:#174fca}.secondary{background:#edf2fb;color:#28466f}.secondary:hover{background:#e2eafa}
+button:disabled{opacity:.6;cursor:wait}.hint{font-size:11px;color:var(--muted);line-height:1.5}
+.activity-list{display:flex;flex-direction:column;gap:9px;max-height:210px;overflow:auto}.activity{padding:10px 11px;border:1px solid var(--line);border-radius:9px;font-size:12px;display:flex;justify-content:space-between;gap:10px}.activity small{color:var(--muted)}
+.empty{color:var(--muted);font-size:12px;padding:18px 0}
+.footer{text-align:center;color:#98a4b5;font-size:11px;margin-top:26px}
+@media(max-width:760px){.metrics{grid-template-columns:repeat(2,1fr)}.servers{grid-template-columns:1fr}.bottom-grid{grid-template-columns:1fr}.heading{align-items:flex-start;flex-direction:column}}
+@media(max-width:420px){.metrics{gap:9px}.card{padding:14px}.metric-value{font-size:21px}.topbar{padding:16px}.system-pill{font-size:10px}}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand"><div class="logo">⇄</div><div><h1>LoadBalancer Monitor</h1><p>Round Robin Load Balancing System</p></div></div>
+  <div class="system-pill" id="systemPill">● Checking system</div>
+</header>
+<main class="container">
+  <div class="heading">
+    <div><h2>Dashboard Overview</h2><p>Monitor backend availability and request distribution in real time.</p></div>
+    <div class="refresh-note" id="lastUpdated">Waiting for status...</div>
+  </div>
+
+  <section class="metrics">
+    <div class="card"><div class="metric-label">Load balancing algorithm</div><div class="metric-value" style="font-size:21px">Round Robin</div><div class="metric-sub">Sequential request distribution</div></div>
+    <div class="card"><div class="metric-label">Backend servers online</div><div class="metric-value" id="onlineCount">— / 2</div><div class="metric-sub">Live availability check</div></div>
+    <div class="card"><div class="metric-label">Total requests handled</div><div class="metric-value" id="totalRequests">0</div><div class="metric-sub">Successful forwarded requests</div></div>
+    <div class="card"><div class="metric-label">Request distribution</div><div class="metric-value" id="distribution">0% / 0%</div><div class="metric-sub">Server 1 / Server 2</div></div>
+  </section>
+
+  <h3 class="section-title">Backend Server Status</h3>
+  <section class="servers" id="serverCards">
+    <div class="card">Checking backend servers...</div>
+  </section>
+
+  <section class="bottom-grid">
+    <div class="card">
+      <h3 class="section-title">Test the Load Balancer</h3>
+      <p class="hint">Send requests through port 8080. The Round Robin algorithm selects the next backend server and tries the other server if the selected one is unavailable.</p>
+      <div class="actions">
+        <button class="primary" id="sendBtn" onclick="sendRequest()">Send Test Request</button>
+        <button class="secondary" onclick="refreshStatus()">Refresh Status</button>
+      </div>
+      <div class="hint" id="requestMessage">Ready to send a test request.</div>
+    </div>
+    <div class="card">
+      <h3 class="section-title">Recent Activity</h3>
+      <div class="activity-list" id="activityList"><div class="empty">No requests yet. Send a test request to begin.</div></div>
+    </div>
+  </section>
+  <div class="footer">LoadBalancer Monitor · Spring Boot · Java · Round Robin Algorithm</div>
+</main>
+<script>
+let activityItems=[];
+function escapeHtml(value){return String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function renderServers(data){
+ const cards=document.getElementById('serverCards');
+ cards.innerHTML=data.servers.map((s,i)=>{
+   const count=Number(s.requestsHandled)||0;
+   const total=Number(data.totalRequests)||0;
+   const percent=total?Math.round(count/total*100):0;
+   return `<article class="card server-card">
+     <div class="server-head"><div class="server-name">${escapeHtml(s.name)}</div><span class="status ${s.online?'online':'offline'}">${s.online?'● Online':'● Offline'}</span></div>
+     <div class="server-url">${escapeHtml(s.url)}</div>
+     <div class="server-stats"><span>Requests handled</span><strong>${count}</strong></div>
+     <div class="distribution"><div class="bar-label"><span>Request share</span><strong>${percent}%</strong></div><div class="bar"><div class="bar-fill" style="width:${percent}%"></div></div></div>
+   </article>`;
+ }).join('');
+}
+async function refreshStatus(){
+ try{
+   const response=await fetch('/api/dashboard/status',{cache:'no-store'});
+   if(!response.ok) throw new Error('Status endpoint returned '+response.status);
+   const data=await response.json();
+   document.getElementById('onlineCount').textContent=`${data.onlineServers} / ${data.totalServers}`;
+   document.getElementById('totalRequests').textContent=data.totalRequests;
+   const counts=data.servers.map(s=>Number(s.requestsHandled)||0);
+   const total=counts.reduce((a,b)=>a+b,0);
+   const p1=total?Math.round(counts[0]/total*100):0;
+   const p2=total?100-p1:0;
+   document.getElementById('distribution').textContent=`${p1}% / ${p2}%`;
+   document.getElementById('systemPill').textContent=data.onlineServers===data.totalServers?'● All systems operational':(data.onlineServers?'● Partial availability':'● All servers offline');
+   document.getElementById('systemPill').style.background=data.onlineServers===data.totalServers?'#1c644e':(data.onlineServers?'#75551b':'#74323a');
+   renderServers(data);
+   document.getElementById('lastUpdated').textContent='Last updated: '+new Date().toLocaleTimeString();
+ }catch(error){
+   document.getElementById('systemPill').textContent='● Dashboard connection error';
+   document.getElementById('requestMessage').textContent='Could not load status. Make sure the load balancer is running on port 8080.';
+ }
+}
+function addActivity(message,success){
+ activityItems.unshift({message,success,time:new Date().toLocaleTimeString()});
+ activityItems=activityItems.slice(0,8);
+ document.getElementById('activityList').innerHTML=activityItems.map(a=>
+   `<div class="activity"><span>${a.success?'✓':'!' } ${escapeHtml(a.message)}</span><small>${escapeHtml(a.time)}</small></div>`
+ ).join('');
+}
+async function sendRequest(){
+ const button=document.getElementById('sendBtn');
+ const message=document.getElementById('requestMessage');
+ button.disabled=true;button.textContent='Sending...';
+ try{
+   const response=await fetch('/api/request');
+   const body=await response.text();
+   const ok=response.ok;
+   message.textContent=body;
+   addActivity(body,ok);
+   if(!ok) addActivity('Request returned HTTP '+response.status,false);
+ }catch(error){
+   message.textContent='Could not reach the load balancer. Check that port 8080 is running.';
+   addActivity('Load balancer connection failed',false);
+ }finally{
+   button.disabled=false;button.textContent='Send Test Request';
+   await refreshStatus();
+ }
+}
+refreshStatus();
+setInterval(refreshStatus,5000);
+</script>
+</body>
+</html>
